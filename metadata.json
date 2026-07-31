@@ -1,0 +1,6 @@
+{
+  "name": "Gas Station - TRON 能量租赁",
+  "description": "TRON 能量与带宽租赁平台，提供高效、低成本的 TRON 资源租赁、能量转租及自动续租服务",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
