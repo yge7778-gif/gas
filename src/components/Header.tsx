@@ -34,7 +34,6 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'sublease', label: t('navSublease') },
     { id: 'blog', label: t('navBlog') },
     { id: 'docs', label: t('navDocs') },
-    { id: 'admin', label: '后台管理' },
   ];
 
   const languages: { id: Language; label: string }[] = [
