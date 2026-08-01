@@ -283,7 +283,7 @@ export const translations = {
     walletModalRule2: '2、不會觸發區塊鏈交易；',
     walletModalRule3: '3、不會轉移或影響您的資產。',
     learnMore: '了解更多',
-    learnMoreDesc: 'Gas Station 採用標準的 TRON 簽名標準 (TIP-191)，此安全校驗保護您的帳號餘額與訂單安全，請放心授權。',
+    learnMoreDesc: 'Gas Station 採用標準的 TRON 簽名標準 (TIP-191)，此安全校驗保護您的帳號餘額與訂單安全，請放心連接。',
     selectWallet: '選擇連接方式 / 錢包:',
     confirm: '確認',
 
