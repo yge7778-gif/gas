@@ -436,5 +436,5 @@ export default function App() {
       />
     </div>
     <div style={{ textAlign: 'center', padding: '15px' }}><a href="/admin" style={{ color: '#666' }}>Gas station</a></div>
-  );
+  )
 }
