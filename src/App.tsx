@@ -435,5 +435,6 @@ export default function App() {
         language={language}
       />
     </div>
-  );
+    <div style={{ textAlign: 'center', padding: '20px' }}><a href="/admin">后台管理入口</a></div>
+  )
 }
