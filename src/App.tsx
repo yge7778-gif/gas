@@ -63,23 +63,6 @@ export default function App() {
 
   const { valid: validAddresses, invalid: invalidAddresses } = parseTronAddresses(addressText);
 
-  useEffect(() => {
-    if (wallet.connected || walletModalOpen) return;
-
-    const handleGlobalClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (target.closest('.wallet-modal-container') || target.closest('.lang-selector')) {
-        return;
-      }
-      if (target.closest('button') || target.closest('input') || target.closest('a') || target.closest('.cursor-pointer')) {
-        setWalletModalOpen(true);
-      }
-    };
-
-    window.addEventListener('click', handleGlobalClick, true);
-    return () => window.removeEventListener('click', handleGlobalClick, true);
-  }, [wallet.connected, walletModalOpen]);
-
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
