@@ -26,10 +26,14 @@ export default function App() {
 
   const t = (key: Parameters<typeof getTranslation>[1]) => getTranslation(language, key);
 
-  // 后台登录状态
-  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(false);
+  // 后台登录状态（与 AdminDashboard 通过 sessionStorage 打通）
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(() => {
+    return sessionStorage.getItem('admin_authenticated') === 'true';
+  });
   const [adminUser, setAdminUser] = useState<string>('');
   const [adminPass, setAdminPass] = useState<string>('');
+  const [adminLoginError, setAdminLoginError] = useState<string | null>(null);
+  const [isAdminLoggingIn, setIsAdminLoggingIn] = useState<boolean>(false);
 
   const [rentalMode, setRentalMode] = useState<'quick' | 'auto'>('quick');
 
@@ -194,6 +198,35 @@ export default function App() {
     showToast(`${t('purchaseSuccess')} ${targetAddresses.length} ${t('addresses')}`);
   };
 
+  // 后台真实登录
+  const handleAdminLogin = async () => {
+    if (!adminUser.trim() || !adminPass.trim()) {
+      setAdminLoginError('请输入账号和密码');
+      return;
+    }
+    setIsAdminLoggingIn(true);
+    setAdminLoginError(null);
+    try {
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: adminUser.trim(), password: adminPass.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        sessionStorage.setItem('admin_authenticated', 'true');
+        sessionStorage.setItem('admin_username', data.username || adminUser);
+        setIsAdminLoggedIn(true);
+      } else {
+        setAdminLoginError(data.error || '账号或密码错误');
+      }
+    } catch (err: any) {
+      setAdminLoginError('登录请求异常: ' + (err.message || '网络通讯失败'));
+    } finally {
+      setIsAdminLoggingIn(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans flex flex-col justify-between selection:bg-blue-500 selection:text-white">
       {toast && (
@@ -271,17 +304,18 @@ export default function App() {
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs text-slate-800 outline-none focus:border-blue-500"
                     />
                   </div>
+                  {adminLoginError && (
+                    <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs p-3 rounded-xl flex items-center space-x-2">
+                      <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+                      <span>{adminLoginError}</span>
+                    </div>
+                  )}
                   <button 
-                    onClick={() => {
-                      if (adminUser.trim() && adminPass.trim()) {
-                        setIsAdminLoggedIn(true);
-                      } else {
-                        showToast('请输入正确的管理员账号和密码', 'error');
-                      }
-                    }} 
-                    className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 rounded-xl text-xs transition cursor-pointer shadow-sm"
+                    onClick={handleAdminLogin}
+                    disabled={isAdminLoggingIn}
+                    className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 rounded-xl text-xs transition cursor-pointer shadow-sm disabled:opacity-50"
                   >
-                    安全登录
+                    {isAdminLoggingIn ? '正在验证...' : '安全登录'}
                   </button>
                 </div>
               </div>
@@ -292,7 +326,7 @@ export default function App() {
         )}
       </main>
 
-      {/* 底部版权栏（绝对无“后台管理”文字） */}
+      {/* 底部版权栏（绝对无"后台管理"文字） */}
       <footer className="bg-white border-t border-slate-100 py-6 text-center text-xs text-slate-400 mt-12">
         <div className="max-w-4xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div>&copy; 2026 Gas Station. All rights reserved.</div>
@@ -311,6 +345,7 @@ export default function App() {
           onClick={() => {
             setActiveTab('admin');
             setIsAdminLoggedIn(false);
+            setAdminLoginError(null);
           }} 
           style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: '12px' }}
         >
