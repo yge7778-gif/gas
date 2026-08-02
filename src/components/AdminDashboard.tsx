@@ -21,13 +21,11 @@ import {
   User, 
   LogOut, 
   Shield, 
-  KeyRound,
   Settings,
   Save,
   Sliders,
   Eye,
-  EyeOff,
-  Zap
+  EyeOff
 } from 'lucide-react';
 import { Language } from '../types';
 
@@ -78,7 +76,10 @@ const ADMIN_TOKEN = 'admin-token';
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ language }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return sessionStorage.getItem('admin_authenticated') === 'true';
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('admin_authenticated') === 'true';
+    }
+    return false;
   });
   const [loginUser, setLoginUser] = useState<string>('bootsky888');
   const [loginPass, setLoginPass] = useState<string>('Qa7495231@@@');
@@ -385,7 +386,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ language }) => {
 
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-700 flex items-center space-x-1.5">
-                <KeyRound className="w-3.5 h-3.5 text-slate-400" />
+                <Key className="w-3.5 h-3.5 text-slate-400" />
                 <span>管理员密码</span>
               </label>
               <input
